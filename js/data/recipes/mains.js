@@ -148,6 +148,16 @@ export const MAINS = [
     ],
   },
   {
+    id: 'chicken_waffles', name: 'Куриные вафли с овощным салатом', emoji: '🧇', meals: LD, time: 30, equip: 'waffle',
+    ing: [['minced_chicken', 150], ['zucchini', 100], ['egg', 0.5], ['flour', 20], ['cheese', 20, 'opt'], ['cucumber', 100], ['tomato', 100], ['oil', 10]],
+    steps: [
+      'Натри кабачок на мелкой тёрке и отожми сок.',
+      'Смешай фарш с кабачком, яйцом, мукой, тёртым сыром и солью.',
+      'Выкладывай в смазанную разогретую вафельницу и выпекай 7–8 минут, пока курица не пропечётся.',
+      'Подавай с салатом из огурцов и помидоров, заправленным маслом.',
+    ],
+  },
+  {
     id: 'steamed_chicken', name: 'Курица на пару с брокколи и рисом', emoji: '♨️', meals: LD, time: 30, equip: 'steamer|multicooker|stove',
     ing: [['chicken_breast', 150], ['broccoli', 150], ['rice', 70], ['soy_sauce', 10, 'opt'], ['butter', 5, 'opt']],
     steps: [

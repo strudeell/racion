@@ -4,7 +4,7 @@ import { STORES } from './data/stores.js';
 import { MEALS, MEAL_NAMES, MEAL_EMOJI, DAY_NAMES, ALLERGENS, STOP_CHIPS, KITCHEN } from './data/dicts.js';
 import {
   P, R, makeContext, makePlan, derive, estimateBudget, swapOptions, replaceSlot,
-  defaultKcal, peopleCount, newSeed, priceOf, matchStopChip,
+  defaultKcal, peopleCount, newSeed, priceOf, matchStopChip, scaleNutrition,
   amountText, fmtRub, fmtNum, fmtMass, plural,
 } from './planner.js';
 
@@ -15,19 +15,33 @@ const $toast = document.getElementById('toast');
 
 // --- Состояние
 
+// others — пол остальных взрослых ('f' / 'm' / null), kids — [{ age, sex }].
 const freshAnswers = () => ({
-  store: null, adults: 2, hasKids: false, kids: [],
+  store: null, adults: 2, others: [null], hasKids: false, kids: [],
   myMeals: [...MEALS], familyMeals: [], sex: null,
   allergies: [], stop: [], kitchen: [], budgetMode: 'none', budget: null,
 });
 const freshSettings = () => ({ kcal: null, priceAdj: 0, batch: true, staplesInTotal: false });
+
+// Список остальных взрослых всегда на одного меньше, чем взрослых всего.
+function syncOthers(a) {
+  a.others = (Array.isArray(a.others) ? a.others : []).slice(0, Math.max(0, a.adults - 1));
+  while (a.others.length < a.adults - 1) a.others.push(null);
+  return a;
+}
+
+// Ответы из первой версии: у детей был только возраст.
+function migrate(a) {
+  a.kids = (a.kids || []).map(k => (typeof k === 'number' ? { age: k, sex: null } : k));
+  return syncOthers(a);
+}
 
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
     if (s) {
       return {
-        answers: { ...freshAnswers(), ...s.answers },
+        answers: migrate({ ...freshAnswers(), ...s.answers }),
         settings: { ...freshSettings(), ...s.settings },
         plan: s.plan || null,
         checked: s.checked || {},
@@ -70,6 +84,7 @@ const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const toggleIn = (arr, x) => { const i = arr.indexOf(x); if (i >= 0) arr.splice(i, 1); else arr.push(x); };
 const people = n => `${n} ${plural(n, ['человека', 'человек', 'человек'])}`;
+const years = n => `${n} ${plural(n, ['год', 'года', 'лет'])}`;
 
 let toastTimer;
 function toast(text) {
@@ -124,16 +139,37 @@ const STEPS = [
   { label: 'Магазин', title: 'Где покупаешь продукты?', sub: 'Цены в меню посчитаем для этого магазина.', view: StepStore, valid: a => !!a.store },
   { label: 'Семья', title: 'Для кого готовим?', view: StepPeople, valid: () => true },
   { label: 'Приёмы пищи', title: 'Какие приёмы пищи планируем?', sub: 'Отметь, что готовишь для себя, а&nbsp;что&nbsp;— сразу на&nbsp;всех.', view: StepMeals, valid: a => a.myMeals.length + a.familyMeals.length > 0 },
-  { label: 'Пол', title: 'Твой пол', sub: 'От него зависит примерная норма калорий.', view: StepSex, valid: a => !!a.sex },
+  {
+    label: 'Пол',
+    title: a => (hasSharedMeals(a) ? 'Пол каждого, кто ест' : 'Твой пол'),
+    sub: a => (hasSharedMeals(a)
+      ? 'У женщин и мужчин, девочек и мальчиков разная норма калорий — так порции и КБЖУ будут точнее.'
+      : 'От него зависит примерная норма калорий.'),
+    view: StepSex,
+    valid: sexKnown,
+  },
   { label: 'Аллергии', title: 'Есть аллергии?', sub: 'Эти продукты не попадут ни в одно блюдо.', view: StepAllergy, valid: a => a.allergies.length > 0 },
   { label: 'Не любишь', title: 'Что не готовим?', sub: 'Продукты, которые просто не нравятся. Аллергии уже учли.', view: StepStop, valid: () => true },
   { label: 'Кухня', title: 'Что есть на кухне?', sub: 'Рецепты подберём только под твою технику.', view: StepKitchen, valid: a => a.kitchen.length > 0 },
   { label: 'Бюджет', title: 'Бюджет на неделю', sub: 'Подберём блюда так, чтобы уложиться в сумму.', view: StepBudget, valid: a => a.budgetMode === 'none' || a.budget >= 300 },
 ];
 
+// Меню не только для себя: несколько человек и есть общие приёмы пищи.
+function hasSharedMeals(a) {
+  return peopleCount(a) > 1 && a.familyMeals.length > 0;
+}
+
+function sexKnown(a) {
+  if (!a.sex) return false;
+  if (!hasSharedMeals(a)) return true;
+  return a.others.every(Boolean) && (!a.hasKids || a.kids.every(k => k.sex));
+}
+
 function Quiz() {
   const st = STEPS[view.step];
   const last = view.step === STEPS.length - 1;
+  const title = typeof st.title === 'function' ? st.title(S.answers) : st.title;
+  const sub = typeof st.sub === 'function' ? st.sub(S.answers) : st.sub;
   return `
   <main class="screen quiz">
     <header class="quiz-top">
@@ -143,8 +179,8 @@ function Quiz() {
     </header>
     <div class="progress" aria-hidden="true">${STEPS.map((_, i) => `<i class="${i <= view.step ? 'on' : ''}"></i>`).join('')}</div>
     <div class="progress-meta"><span>${st.label}</span><span>Шаг ${view.step + 1} из ${STEPS.length}</span></div>
-    <h1 class="q-title">${st.title}</h1>
-    ${st.sub ? `<p class="q-sub">${st.sub}</p>` : ''}
+    <h1 class="q-title">${title}</h1>
+    ${sub ? `<p class="q-sub">${sub}</p>` : ''}
     <div class="q-body">${st.view(S.answers)}</div>
   </main>
   <div class="cta-bar">
@@ -176,12 +212,12 @@ function StepPeople(a) {
     <button class="switch ${a.hasKids ? 'on' : ''}" role="switch" aria-checked="${a.hasKids}" aria-label="Есть дети" data-act="toggleKids"><i></i></button>
   </div>
   ${a.hasKids ? `<div class="card kids">
-    ${a.kids.map((age, i) => `
+    ${a.kids.map(({ age }, i) => `
       <div class="kid-row">
         <span>Ребёнок ${i + 1}</span>
         <div class="mini-counter">
           <button data-act="kidAge" data-i="${i}" data-d="-1" ${age <= 1 ? 'disabled' : ''} aria-label="Младше">−</button>
-          <output>${age} ${plural(age, ['год', 'года', 'лет'])}</output>
+          <output>${years(age)}</output>
           <button data-act="kidAge" data-i="${i}" data-d="1" ${age >= 17 ? 'disabled' : ''} aria-label="Старше">+</button>
         </div>
         <button class="x" data-act="kidRemove" data-i="${i}" aria-label="Убрать ребёнка">×</button>
@@ -212,10 +248,30 @@ function StepMeals(a) {
 }
 
 function StepSex(a) {
-  return `<div class="grid2">${[['f', '👩', 'Женский'], ['m', '👨', 'Мужской']].map(([id, e, t]) => `
-    <button class="opt big ${a.sex === id ? 'sel' : ''}" data-act="pickSex" data-id="${id}" aria-pressed="${a.sex === id}">
+  const shared = hasSharedMeals(a);
+  const mine = `<div class="grid2">${[['f', '👩', 'Женский'], ['m', '👨', 'Мужской']].map(([id, e, t]) => `
+    <button class="opt ${shared ? 'compact' : 'big'} ${a.sex === id ? 'sel' : ''}" data-act="pickSex" data-id="${id}" aria-pressed="${a.sex === id}">
       <span class="emoji-lg">${e}</span><b>${t}</b>
     </button>`).join('')}</div>`;
+  if (!shared) return mine;
+
+  const seg = (act, i, value, options) => `<div class="seg" role="group">${options.map(([v, e, t]) => `
+    <button class="${value === v ? 'on' : ''}" data-act="${act}" data-i="${i}" data-sex="${v}" aria-pressed="${value === v}">${e} ${t}</button>`).join('')}</div>`;
+  const adults = a.others.map((sex, i) => `
+    <div class="sex-row">
+      <span>${a.adults === 2 ? 'Второй взрослый' : `Взрослый ${i + 2}`}</span>
+      ${seg('setOtherSex', i, sex, [['f', '👩', 'Женщина'], ['m', '👨', 'Мужчина']])}
+    </div>`).join('');
+  const kids = a.hasKids ? a.kids.map((k, i) => `
+    <div class="sex-row">
+      <span>Ребёнок ${i + 1} · ${years(k.age)}</span>
+      ${seg('setKidSex', i, k.sex, [['f', '👧', 'Девочка'], ['m', '👦', 'Мальчик']])}
+    </div>`).join('') : '';
+  return `
+  <div class="group-label">Ты</div>
+  ${mine}
+  ${adults ? `<div class="group-label">Остальные взрослые</div><div class="card sex-list">${adults}</div>` : ''}
+  ${kids ? `<div class="group-label">Дети</div><div class="card sex-list">${kids}</div>` : ''}`;
 }
 
 function StepAllergy(a) {
@@ -328,7 +384,9 @@ function animateLoading(done) {
 
 function Result() {
   const { ctx, d } = derived();
-  const n = peopleCount(S.answers);
+  const shared = hasSharedMeals(S.answers);
+  const n = shared ? peopleCount(S.answers) : 1;
+  const unknownSex = shared && ctx.people.some((p, j) => j > 0 && !p.sex);
   const budget = budgetOf();
   const count = d.list.groups.reduce((s, g) => s + g.items.length, 0);
   return `
@@ -345,6 +403,8 @@ function Result() {
         <div><span class="se">🔥</span><span><small>Твоя норма</small><b>${fmtNum(ctx.eaters.me[0])} ккал</b></span></div>
         <div><span class="se">🛒</span><span><small>Корзина</small><b>≈ ${fmtRub(d.total)}</b></span></div>
       </div>
+      ${shared ? `<p class="norms">Нормы калорий в день: ${ctx.people.map(p => `${p.label} — ${fmtNum(p.kcal)}`).join(' · ')}</p>` : ''}
+      ${unknownSex ? '<p class="warn">Укажи пол каждого, кто ест, — порции станут точнее. <button class="link-btn inline" data-act="editSex">Указать</button></p>' : ''}
       ${budget ? (d.total <= budget
         ? `<p class="banner ok">✓ Уложились в бюджет: ${fmtRub(d.total)} из ${fmtRub(budget)}</p>`
         : `<p class="banner over">Корзина на ${fmtRub(d.total - budget)} дороже бюджета (${fmtRub(budget)}). Замени пару блюд на те, что с зелёной ценой, или собери меню заново.</p>`) : ''}
@@ -491,6 +551,13 @@ function openRecipe(i) {
     </div>
     <p class="caption">на твою порцию</p>
     ${notes.length ? `<div class="chips notes">${notes.map(t => `<span class="chip static">${esc(t)}</span>`).join('')}</div>` : ''}
+    ${s.who === 'family' ? `
+    <h3>Кому сколько</h3>
+    <ul class="ing share">${derived().ctx.people.map((person, j) => {
+      const n = scaleNutrition(c.base, it.mults[j]);
+      return `<li><span>${person.label}<small>Б ${fmtNum(n.p)} · Ж ${fmtNum(n.f)} · У ${fmtNum(n.c)} г</small></span><b>${fmtNum(n.kcal)} ккал · ${Math.round(it.mults[j] / it.mult * 100)}%</b></li>`;
+    }).join('')}</ul>
+    <p class="caption left">Процент — какая часть готового блюда достаётся каждому за один приём пищи.</p>` : ''}
     <h3>Продукты</h3>
     <ul class="ing">${c.ings.map(g => `<li><span>${g.p.name}${g.opt ? ' <small>по желанию</small>' : ''}</span><b>${amountText(g.p, g.amt * cookMult)}</b></li>`).join('')}</ul>
     <h3>Как готовить</h3>
@@ -686,15 +753,22 @@ const ACTIONS = {
     else calculate();
   },
   pickStore(t) { S.answers.store = t.dataset.id; save(); render(); },
-  adults(t) { S.answers.adults = clamp(S.answers.adults + Number(t.dataset.d), 1, 8); fixFamily(); save(); render(); },
+  adults(t) {
+    const a = S.answers;
+    a.adults = clamp(a.adults + Number(t.dataset.d), 1, 8);
+    syncOthers(a); fixFamily(); save(); render();
+  },
   toggleKids() {
     const a = S.answers;
     a.hasKids = !a.hasKids;
-    if (a.hasKids && !a.kids.length) a.kids = [5];
+    if (a.hasKids && !a.kids.length) a.kids = [{ age: 5, sex: null }];
     fixFamily(); save(); render();
   },
-  kidAge(t) { const k = S.answers.kids; const i = Number(t.dataset.i); k[i] = clamp(k[i] + Number(t.dataset.d), 1, 17); save(); render(); },
-  kidAdd() { S.answers.kids.push(5); save(); render(); },
+  kidAge(t) { const k = S.answers.kids[Number(t.dataset.i)]; k.age = clamp(k.age + Number(t.dataset.d), 1, 17); save(); render(); },
+  kidAdd() { S.answers.kids.push({ age: 5, sex: null }); save(); render(); },
+  setOtherSex(t) { S.answers.others[Number(t.dataset.i)] = t.dataset.sex; save(); render(); },
+  setKidSex(t) { S.answers.kids[Number(t.dataset.i)].sex = t.dataset.sex; save(); render(); },
+  editSex() { go({ screen: 'quiz', step: STEPS.findIndex(st => st.label === 'Пол') }); },
   kidRemove(t) {
     const a = S.answers;
     a.kids.splice(Number(t.dataset.i), 1);

@@ -9,9 +9,12 @@ import { MEALS, MEAL_SHARE, DEPTS, STOP_CHIPS } from './data/dicts.js';
 export const P = Object.fromEntries(PRODUCTS.map(p => [p.id, p]));
 export const R = Object.fromEntries(RECIPES.map(r => [r.id, r]));
 
-const OTHER_ADULT_KCAL = 2100;
+// Нормы остальных взрослых — обычные, без похудения. Если пол не указан — среднее.
+const ADULT_KCAL = { f: 2000, m: 2500 };
+const ADULT_KCAL_UNKNOWN = 2250;
+// Пределы порции относительно стандартной взрослой (из рецепта): от половины до двух с половиной.
 const MIN_PORTION = 0.5;
-const MAX_PORTION = 1.8;
+const MAX_PORTION = 2.5;
 const REPEAT_PENALTY = 450; // «штраф» в рублях за повтор блюда в неделе
 const KIND_PENALTY = 150;   // за похожее блюдо (два плова, три пасты)
 
@@ -25,12 +28,48 @@ export function defaultKcal(sex) {
   return sex === 'm' ? 2300 : 1800;
 }
 
-export function kidKcal(age) {
+// Примерная норма ребёнка по возрасту и полу. Если пол не указан — среднее.
+export function kidKcal(age, sex = null) {
+  const bySex = (f, m) => (sex === 'f' ? f : sex === 'm' ? m : Math.round((f + m) / 2));
   if (age <= 3) return 1200;
   if (age <= 6) return 1450;
-  if (age <= 10) return 1800;
-  if (age <= 13) return 2100;
-  return 2400;
+  if (age <= 10) return bySex(1800, 1900);
+  if (age <= 13) return bySex(2100, 2300);
+  return bySex(2300, 2700);
+}
+
+const ADULT_LABEL = { f: 'Женщина', m: 'Мужчина' };
+const KID_LABEL = { f: 'Девочка', m: 'Мальчик' };
+const years = n => `${n} ${plural(n, ['год', 'года', 'лет'])}`;
+
+// Все, кто ест, с нормой калорий и подписью: «Ты», «Мужчина», «Девочка, 5 лет».
+function familyPeople(a, me) {
+  const list = [{ base: 'Ты', kcal: me, sex: a.sex, kid: false }];
+  for (let i = 1; i < a.adults; i++) {
+    const sex = (a.others || [])[i - 1] || null;
+    list.push({ base: ADULT_LABEL[sex] || `Взрослый ${i + 1}`, kcal: ADULT_KCAL[sex] || ADULT_KCAL_UNKNOWN, sex, kid: false });
+  }
+  if (a.hasKids) {
+    for (const k of a.kids) {
+      const kid = typeof k === 'number' ? { age: k, sex: null } : k;
+      list.push({ base: KID_LABEL[kid.sex] || 'Ребёнок', kcal: kidKcal(kid.age, kid.sex), sex: kid.sex, kid: true, age: kid.age });
+    }
+  }
+  // Одинаковые подписи нумеруем: «Мужчина 1», «Мужчина 2».
+  const full = p => p.base + (p.kid ? `, ${years(p.age)}` : '');
+  const count = {};
+  for (const p of list) count[full(p)] = (count[full(p)] || 0) + 1;
+  const seen = {};
+  for (const p of list) {
+    const f = full(p);
+    if (count[f] > 1) {
+      seen[f] = (seen[f] || 0) + 1;
+      p.label = `${p.base} ${seen[f]}${p.kid ? `, ${years(p.age)}` : ''}`;
+    } else {
+      p.label = f;
+    }
+  }
+  return list;
 }
 
 export function peopleCount(a) {
@@ -82,11 +121,9 @@ export function makeContext(answers, settings = {}, prices = {}) {
   const noSpicy = stopTags.has('spicy') || stopStems.some(ws => ws.some(w => w.length >= 3 && 'острое'.startsWith(w)));
 
   const me = settings.kcal || defaultKcal(a.sex);
-  const others = [];
-  for (let i = 1; i < a.adults; i++) others.push(OTHER_ADULT_KCAL);
-  const hasKids = a.hasKids && a.kids.length > 0;
-  if (hasKids) for (const age of a.kids) others.push(kidKcal(age));
-  const family = others.length > 0;
+  const people = familyPeople(a, me);
+  const hasKids = people.some(p => p.kid);
+  const family = people.length > 1;
 
   const slotSpec = [];
   for (let day = 0; day < 7; day++) {
@@ -106,7 +143,8 @@ export function makeContext(answers, settings = {}, prices = {}) {
     stopTags,
     stopStems,
     noSpicy,
-    eaters: { me: [me], family: [me, ...others] },
+    eaters: { me: [me], family: people.map(p => p.kcal) },
+    people,
     hasKids,
     slotSpec,
     batch: settings.batch !== false,
@@ -496,7 +534,7 @@ export function derive(ctx, plan) {
     const mults = portions(ctx, s, c);
     const mult = sum(mults);
     const my = scaleNutrition(c.base, mults[0]);
-    day.items.push({ i, s, c, mult, my, people: mults.length });
+    day.items.push({ i, s, c, mult, mults, my, people: mults.length });
     day.kcal += my.kcal;
     if (!s.left) {
       addNeed(need, c, mult * s.days);

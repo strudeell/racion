@@ -65,8 +65,11 @@ function pickSome(arr, max) { return arr.filter(() => Math.random() < max); }
 let runs = 0, totalMs = 0, maxMs = 0;
 for (let t = 0; t < 400; t++) {
   const adults = 1 + rnd(4);
+  const sexOrNull = () => [null, 'f', 'm'][rnd(3)];
+  const others = Array.from({ length: adults - 1 }, sexOrNull);
   const hasKids = Math.random() < 0.4;
-  const kids = hasKids ? Array.from({ length: 1 + rnd(3) }, () => 1 + rnd(17)) : [];
+  // Старый формат (просто возраст) тоже должен работать — так хранились ответы в первой версии.
+  const kids = hasKids ? Array.from({ length: 1 + rnd(3) }, () => (Math.random() < 0.15 ? 1 + rnd(17) : { age: 1 + rnd(17), sex: sexOrNull() })) : [];
   const allergies = Math.random() < 0.5 ? ['none'] : pickSome(ALLERGENS.map(a => a[0]), 0.25);
   const stop = pickSome(STOP_CHIPS, 0.2).map(([text, tag]) => ({ text, tag }));
   if (Math.random() < 0.2) stop.push({ text: 'курицу' });
@@ -76,7 +79,7 @@ for (let t = 0; t < 400; t++) {
   const familyMeals = adults + kids.length > 1 ? pickSome(MEALS, 0.5) : [];
   if (!myMeals.length && !familyMeals.length) myMeals.push('dinner');
   const answers = {
-    store: STORES[rnd(STORES.length)].id, adults, hasKids: kids.length > 0, kids, myMeals, familyMeals,
+    store: STORES[rnd(STORES.length)].id, adults, others, hasKids: kids.length > 0, kids, myMeals, familyMeals,
     sex: Math.random() < 0.5 ? 'f' : 'm', allergies: allergies.length ? allergies : ['none'], stop, kitchen,
     budgetMode: 'none', budget: null,
   };
@@ -89,10 +92,16 @@ for (let t = 0; t < 400; t++) {
   const ms = performance.now() - t0;
   totalMs += ms; maxMs = Math.max(maxMs, ms); runs++;
 
+  if (ctx.people.length !== adults + kids.length) fail(`Людей ${ctx.people.length}, а должно быть ${adults + kids.length} (анкета ${t})`);
+  if (ctx.people.some(p => !(p.kcal >= 1000 && p.kcal <= 3500) || !p.label)) fail(`Странная норма или подпись: ${JSON.stringify(ctx.people)} (анкета ${t})`);
+
   const al = new Set(answers.allergies.filter(a => a !== 'none'));
+  const hasWaffle = kitchen.includes('waffle');
   for (const day of d.days) {
     for (const it of day.items) {
       if (it.missing) continue;
+      if (!hasWaffle && it.c.r.equip.includes('waffle')) fail(`Вафли без вафельницы: «${it.c.r.name}» (анкета ${t})`);
+      if (it.mults.length !== (it.s.who === 'family' ? ctx.people.length : 1)) fail(`Порций ${it.mults.length} у «${it.c.r.name}» (анкета ${t})`);
       for (const { p } of it.c.ings) {
         for (const a of p.al || []) if (al.has(a)) fail(`Аллерген ${a} в «${it.c.r.name}» (анкета ${t})`);
         for (const tg of p.tags || []) if (stop.some(s => s.tag === tg)) fail(`Нелюбимый ${tg} в «${it.c.r.name}» (анкета ${t})`);
@@ -116,14 +125,33 @@ for (let t = 0; t < 400; t++) {
   }
 }
 
-// 3. Пример меню
+// 3. Порции по полу: мужчине больше, чем женщине, подросток-мальчик ест больше девочки
 {
-  const answers = { store: 'p5', adults: 2, hasKids: true, kids: [5], myMeals: MEALS, familyMeals: ['dinner'], sex: 'f', allergies: ['none'], stop: [{ text: 'Печень', tag: 'liver' }], kitchen: ['stove', 'oven', 'micro'], budgetMode: 'none', budget: null };
+  const answers = {
+    store: 'p5', adults: 3, others: ['m', 'f'], hasKids: true, kids: [{ age: 15, sex: 'm' }, { age: 15, sex: 'f' }, { age: 4, sex: 'f' }],
+    myMeals: MEALS, familyMeals: MEALS, sex: 'f', allergies: ['none'], stop: [], kitchen: [...kitchenIds], budgetMode: 'none', budget: null,
+  };
+  const ctx = makeContext(answers);
+  const labels = ctx.people.map(p => `${p.label} ${p.kcal}`);
+  console.log(`\nСемья: ${labels.join(' · ')}`);
+  const d = derive(ctx, makePlan(ctx, { seed: 5 }));
+  const it = d.days[0].items.find(x => x.s.meal === 'lunch' && !x.missing);
+  const [me, man, woman, boy, girl, small] = it.mults;
+  if (!(man > woman)) fail(`Мужчине (${man}) не больше, чем женщине (${woman})`);
+  if (!(boy > girl)) fail(`Мальчику 15 лет (${boy}) не больше, чем девочке (${girl})`);
+  if (!(small < girl)) fail(`Ребёнку 4 лет (${small}) не меньше, чем подростку (${girl})`);
+  if (Math.abs(me - woman * 1800 / 2000) > 0.02) fail(`Твоя порция ${me} не соответствует норме 1800`);
+  console.log(`Обед «${it.c.name}», доли: ${ctx.people.map((p, j) => `${p.label} ${Math.round(it.mults[j] / it.mult * 100)}%`).join(', ')}`);
+}
+
+// 4. Пример меню
+{
+  const answers = { store: 'p5', adults: 2, others: ['m'], hasKids: true, kids: [{ age: 5, sex: 'f' }], myMeals: MEALS, familyMeals: ['dinner'], sex: 'f', allergies: ['none'], stop: [{ text: 'Печень', tag: 'liver' }], kitchen: ['stove', 'oven', 'micro', 'waffle'], budgetMode: 'none', budget: null };
   const ctx = makeContext(answers);
   const est = estimateBudget(ctx);
   const plan = makePlan(ctx, { seed: 42 });
   const d = derive(ctx, plan);
-  console.log(`\nПример: 2 взрослых + ребёнок 5 лет, общие ужины, Пятёрочка. Обычно ≈${est.typical} ₽, минимум ≈${est.min} ₽`);
+  console.log(`\nПример: ты + мужчина + девочка 5 лет, общие ужины, есть вафельница, Пятёрочка. Обычно ≈${est.typical} ₽, минимум ≈${est.min} ₽`);
   for (const day of d.days) {
     console.log(`  День ${day.d + 1} (${Math.round(day.kcal)} ккал): ` + day.items.map(it => it.missing ? '—' : `${it.c.r.name}${it.s.left ? ' (вчерашн.)' : ''}`).join(' | '));
   }

@@ -10,7 +10,7 @@
 //   meals  — когда подавать: ['breakfast'], ['lunch'], ['dinner'] или несколько
 //   time   — время готовки, минут
 //   equip  — нужная техника: stove, oven, micro, multicooker, airfryer, blender,
-//            steamer, grillpan. «|» значит «или», «+» — «и».
+//            steamer, grillpan, waffle. «|» значит «или», «+» — «и».
 //            'stove|multicooker + blender' — плита или мультиварка, и ещё блендер.
 //            Пустая строка — техника не нужна.
 //   batch  — 2, если блюдо готовят сразу на 2 дня (супы, рагу)
