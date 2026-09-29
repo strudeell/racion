@@ -393,9 +393,9 @@ function MealRow(it) {
   return `<div class="meal">
     <button class="meal-main" data-act="recipe" data-i="${it.i}">
       <span class="me" aria-hidden="true">${r.emoji}</span>
-      <span class="mt"><small>${MEAL_NAMES[s.meal]} · ${who}</small><b>${r.name}</b><small>${extra} · ${fmtNum(it.my.kcal)} ккал</small></span>
+      <span class="mt"><small>${MEAL_NAMES[s.meal]} · ${who}</small><b>${it.c.name}</b><small>${extra} · ${fmtNum(it.my.kcal)} ккал</small></span>
     </button>
-    <button class="swap" data-act="swap" data-i="${it.i}" aria-label="Заменить блюдо «${r.name}»">${SwapIcon()}</button>
+    <button class="swap" data-act="swap" data-i="${it.i}" aria-label="Заменить блюдо «${it.c.name}»">${SwapIcon()}</button>
   </div>`;
 }
 
@@ -480,7 +480,7 @@ function openRecipe(i) {
   ];
   openSheet(`
     <div class="sheet-emoji" aria-hidden="true">${r.emoji}</div>
-    <h2>${r.name}</h2>
+    <h2>${c.name}</h2>
     <p class="muted">⏱ ${r.time} мин · ${portionsText}</p>
     ${s.left ? '<p class="note-inline">Это блюдо приготовлено вчера сразу на 2 дня — просто разогрей.</p>' : days === 2 ? '<p class="note-inline">Готовим сразу на 2 дня: половину убери в холодильник на завтра.</p>' : ''}
     <div class="kbju">
@@ -509,7 +509,7 @@ function openSwap(i) {
     ${opts.length ? `<div class="swap-list">${opts.map(o => `
       <button class="swap-opt" data-act="doSwap" data-i="${i}" data-rid="${o.c.r.id}">
         <span class="me" aria-hidden="true">${o.c.r.emoji}</span>
-        <span class="mt"><b>${o.c.r.name}</b><small>${o.c.r.time} мин · ${fmtNum(o.myKcal)} ккал${o.used ? ' · уже есть в меню' : ''}</small></span>
+        <span class="mt"><b>${o.c.name}</b><small>${o.c.r.time} мин · ${fmtNum(o.myKcal)} ккал${o.used ? ' · уже есть в меню' : ''}</small></span>
         <span class="delta ${o.delta > 4 ? 'up' : o.delta < -4 ? 'down' : ''}">${deltaText(o.delta)}</span>
       </button>`).join('')}</div>`
       : '<p class="note-inline">Других блюд под твои условия нет. Отметь больше техники или убери часть ограничений.</p>'}
@@ -727,9 +727,10 @@ const ACTIONS = {
   recipe(t) { openRecipe(Number(t.dataset.i)); },
   swap(t) { openSwap(Number(t.dataset.i)); },
   doSwap(t) {
-    S.plan = replaceSlot(ctxNow(), S.plan, Number(t.dataset.i), t.dataset.rid);
+    const i = Number(t.dataset.i);
+    S.plan = replaceSlot(ctxNow(), S.plan, i, t.dataset.rid);
     save(); invalidate(); closeSheet(); render();
-    toast(`Заменили на «${R[t.dataset.rid].name}»`);
+    toast(`Заменили на «${findItem(i)?.c?.name || R[t.dataset.rid].name}»`);
   },
   reroll() { buildNewPlan(); render(); toast('Собрали новое меню'); },
   editAnswers() { closeSheet(false); go({ screen: 'quiz', step: 0 }); },

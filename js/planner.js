@@ -174,6 +174,14 @@ function proteinOf(ings) {
   return null;
 }
 
+// Как поправить название, если продукт убрали или заменили: «Блинчики со сметаной» → «Блинчики».
+const NAME_FIXES = {
+  sour_cream: [[' со сметаной', '']],
+  honey: [[' и мёдом', ''], [' с мёдом', '']],
+  butter: [[' со сливочным маслом', '']],
+  milk: [[' с молоком', ' на воде']],
+};
+
 // Рецепт, подогнанный под человека: без запрещённых продуктов, с заменами.
 // Возвращает null, если блюдо не подходит.
 export function prep(ctx, rid, kids = false) {
@@ -190,6 +198,10 @@ function prepare(ctx, r, kids) {
   const ings = [];
   const removed = [];
   const swapped = [];
+  let name = r.name;
+  const fixName = id => {
+    for (const [from, to] of NAME_FIXES[id] || []) name = name.replace(from, to);
+  };
   for (const [id, amt, flag] of r.ing) {
     const opt = flag === 'opt';
     const res = resolve(ctx, id);
@@ -197,14 +209,18 @@ function prepare(ctx, r, kids) {
     if (res.blocked || spicyForKids) {
       if (!opt) return null;
       if (res.p) removed.push(res.p.name);
+      fixName(id);
       continue;
     }
-    if (res.from) swapped.push([res.from.name, res.p.name]);
+    if (res.from) {
+      swapped.push([res.from.name, res.p.name]);
+      fixName(id);
+    }
     ings.push({ p: res.p, amt, opt });
   }
   const base = nutritionOf(ings);
   if (base.kcal < 50) return null;
-  return { r, ings, removed, swapped, base, protein: proteinOf(ings) };
+  return { r, name, ings, removed, swapped, base, protein: proteinOf(ings) };
 }
 
 export function candidates(ctx, meal, who) {
@@ -387,20 +403,35 @@ function fitBudget(ctx, plan, budget, maxIter = 80) {
   return total;
 }
 
+// Самый экономный стартовый вариант. Им же считается «минимум» на шаге бюджета,
+// поэтому если человек выбрал сумму не меньше минимума, уложиться получится всегда.
+const CHEAPEST = { seed: 7, costW: 4, noise: 15 };
+
 export function makePlan(ctx, { seed = newSeed(), budget = null } = {}) {
   if (budget == null) return generatePlan(ctx, { seed });
   const typical = planTotal(ctx, generatePlan(ctx, { seed }));
   const tight = typical > 0 ? clamp((typical - budget) / typical, 0, 1) : 0;
-  const plan = generatePlan(ctx, { seed, costW: 1 + tight * 8, noise: 120 * (1 - Math.min(0.8, tight * 2)) });
-  fitBudget(ctx, plan, budget);
-  return plan;
+  const attempts = [
+    { seed, costW: 1 + tight * 8, noise: 120 * (1 - Math.min(0.8, tight * 2)) },
+    { seed: seed + 7919, costW: 3, noise: 40 },
+    { seed: seed + 15838, costW: 4, noise: 25 },
+    CHEAPEST,
+  ];
+  let best = null;
+  for (const opts of attempts) {
+    const plan = generatePlan(ctx, opts);
+    const total = fitBudget(ctx, plan, budget);
+    if (!best || total < best.total) best = { plan, total };
+    if (total <= budget) break;
+  }
+  return best.plan;
 }
 
 export function estimateBudget(ctx) {
   let typical = 0;
   for (const seed of [11, 22, 33]) typical += planTotal(ctx, generatePlan(ctx, { seed }));
   typical /= 3;
-  const cheap = generatePlan(ctx, { seed: 7, costW: 4, noise: 15 });
+  const cheap = generatePlan(ctx, CHEAPEST);
   const min = fitBudget(ctx, cheap, 0);
   const round50 = x => Math.max(50, Math.round(x / 50) * 50);
   return { typical: round50(typical), min: round50(Math.min(min, typical)) };

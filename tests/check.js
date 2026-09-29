@@ -101,7 +101,8 @@ for (let t = 0; t < 400; t++) {
     }
   }
   if (!Number.isFinite(d.total) || d.total < 0) fail(`Сумма ${d.total} (анкета ${t})`);
-  if (budget != null && est.min <= budget && d.total > budget * 1.12) fail(`Бюджет ${budget}, вышло ${Math.round(d.total)}, минимум ${est.min} (анкета ${t})`);
+  // «Минимум» округлён до 50 ₽, поэтому допускаем перебор не больше 30 ₽.
+  if (budget != null && est.min <= budget && d.total > budget + 30) fail(`Бюджет ${budget}, вышло ${Math.round(d.total)}, минимум ${est.min} (анкета ${t})`);
 
   // Замена блюда не ломает меню
   const i = plan.slots.findIndex(s => s.rid);
