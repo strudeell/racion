@@ -57,12 +57,18 @@ export const PRODUCTS = [
   { id: 'pork', name: 'Свинина (лопатка)', dept: 'meat', unit: 'г', byWeight: true, price: 480, kcal: 250, p: 16, f: 21, c: 0, tags: ['pork'], aka: 'свиной' },
   { id: 'beef', name: 'Говядина для тушения', dept: 'meat', unit: 'г', byWeight: true, price: 850, kcal: 187, p: 18.9, f: 12.4, c: 0, tags: ['beef'], aka: 'говяжий телятина' },
   { id: 'sausages', name: 'Сосиски', dept: 'meat', unit: 'г', pack: 450, price: 260, kcal: 260, p: 11, f: 24, c: 1.6, al: ['milk', 'soy'], tags: ['pork'], aka: 'колбаса сосиска' },
+  { id: 'ham', name: 'Ветчина', dept: 'meat', unit: 'г', pack: 300, price: 230, kcal: 160, p: 15, f: 10, c: 1.5, tags: ['pork'], aka: 'колбаса свиной' },
+  { id: 'turkey', name: 'Индейка, филе бедра', dept: 'meat', unit: 'г', byWeight: true, price: 560, kcal: 144, p: 19.5, f: 7.2, c: 0, aka: 'индюшка птица' },
+  { id: 'chicken_hearts', name: 'Сердечки куриные', dept: 'meat', unit: 'г', byWeight: true, price: 390, kcal: 159, p: 15.8, f: 10.3, c: 0.8, tags: ['chicken'], aka: 'сердце субпродукты ' + CHICKEN },
 
   // Рыба
   { id: 'pollock', name: 'Минтай, филе замороженное', dept: 'fish', unit: 'г', pack: 400, price: 250, kcal: 72, p: 15.9, f: 0.9, c: 0, al: ['fish'], aka: 'рыба' },
   { id: 'mackerel', name: 'Скумбрия', dept: 'fish', unit: 'г', byWeight: true, price: 350, waste: 0.3, kcal: 191, p: 18, f: 13.2, c: 0, al: ['fish'], aka: 'рыба' },
   { id: 'pink_salmon', name: 'Горбуша', dept: 'fish', unit: 'г', byWeight: true, price: 480, waste: 0.2, kcal: 140, p: 20.5, f: 6.5, c: 0, al: ['fish'], aka: 'рыба лосось' },
   { id: 'crab_sticks', name: 'Крабовые палочки', dept: 'fish', unit: 'г', pack: 200, price: 120, kcal: 73, p: 6, f: 1, c: 10, al: ['fish', 'eggs'], aka: 'краб' },
+  { id: 'hake', name: 'Хек, филе замороженное', dept: 'fish', unit: 'г', pack: 400, price: 280, kcal: 86, p: 16.6, f: 2.2, c: 0, al: ['fish'], aka: 'рыба' },
+  { id: 'herring', name: 'Сельдь слабосолёная, филе', dept: 'fish', unit: 'г', pack: 250, price: 190, kcal: 217, p: 16, f: 17, c: 0, al: ['fish'], aka: 'селёдка селедка рыба' },
+  { id: 'saury', name: 'Сайра консервированная', dept: 'canned', unit: 'г', pack: 250, forms: ['банка', 'банки', 'банок'], price: 180, kcal: 205, p: 18.3, f: 14.1, c: 0, al: ['fish'], aka: 'рыба консервы' },
   { id: 'tuna', name: 'Тунец консервированный', dept: 'canned', unit: 'г', pack: 185, forms: ['банка', 'банки', 'банок'], price: 190, kcal: 96, p: 21, f: 1, c: 0, al: ['fish'], aka: 'рыба консервы' },
   { id: 'shrimp', name: 'Креветки варёно-мороженые', dept: 'frozen', unit: 'г', pack: 500, price: 560, waste: 0.1, kcal: 95, p: 18.9, f: 2.2, c: 0, al: ['seafood'], aka: 'морепродукты' },
 
@@ -74,6 +80,7 @@ export const PRODUCTS = [
   { id: 'yogurt', name: 'Йогурт натуральный', dept: 'dairy', unit: 'г', pack: 300, price: 110, kcal: 66, p: 5, f: 2, c: 7, al: ['milk'] },
   { id: 'cheese', name: 'Сыр полутвёрдый', dept: 'dairy', unit: 'г', pack: 200, price: 230, kcal: 350, p: 25, f: 27, c: 0, al: ['milk'] },
   { id: 'feta', name: 'Сыр фета (брынза)', dept: 'dairy', unit: 'г', pack: 200, price: 190, kcal: 260, p: 17, f: 21, c: 0.5, al: ['milk'], aka: 'брынза сыр' },
+  { id: 'processed_cheese', name: 'Сыр плавленый', dept: 'dairy', unit: 'г', pack: 180, price: 110, kcal: 257, p: 9, f: 22, c: 5, al: ['milk'], aka: 'сыр плавленный' },
   { id: 'butter', name: 'Масло сливочное 82%', dept: 'dairy', unit: 'г', pack: 180, price: 250, kcal: 748, p: 0.5, f: 82.5, c: 0.8, al: ['milk'], alt: 'oil' },
   { id: 'cream', name: 'Сливки 10%', dept: 'dairy', unit: 'мл', pack: 200, price: 85, kcal: 118, p: 3, f: 10, c: 4, al: ['milk'] },
   { id: 'egg', name: 'Яйца С1', dept: 'dairy', unit: 'шт', pack: 10, forms: ['десяток', 'десятка', 'десятков'], price: 125, gpu: 55, waste: 0.1, kcal: 157, p: 12.7, f: 11.5, c: 0.7, al: ['eggs'], aka: 'яйцо' },
@@ -89,6 +96,7 @@ export const PRODUCTS = [
   { id: 'lentils', name: 'Чечевица красная', dept: 'grocery', unit: 'г', pack: 450, price: 130, kcal: 314, p: 24, f: 1.5, c: 49 },
   { id: 'peas', name: 'Горох колотый', dept: 'grocery', unit: 'г', pack: 800, price: 90, kcal: 298, p: 20.5, f: 2, c: 49.5 },
   { id: 'chickpeas', name: 'Нут', dept: 'grocery', unit: 'г', pack: 450, price: 140, kcal: 364, p: 19, f: 6, c: 61 },
+  { id: 'bulgur', name: 'Булгур', dept: 'grocery', unit: 'г', pack: 450, price: 120, kcal: 342, p: 12.3, f: 1.3, c: 57.6, al: ['gluten'] },
   { id: 'pasta', name: 'Макароны', dept: 'grocery', unit: 'г', pack: 450, price: 85, kcal: 344, p: 11, f: 1.3, c: 70.5, al: ['gluten'], aka: 'паста спагетти' },
   { id: 'vermicelli', name: 'Вермишель', dept: 'grocery', unit: 'г', pack: 400, price: 70, kcal: 344, p: 11, f: 1.3, c: 70.5, al: ['gluten'], aka: 'лапша' },
   { id: 'breadcrumbs', name: 'Сухари панировочные', dept: 'grocery', unit: 'г', pack: 200, price: 60, kcal: 347, p: 9.7, f: 1.9, c: 77.6, al: ['gluten'] },
@@ -110,6 +118,7 @@ export const PRODUCTS = [
   { id: 'corn', name: 'Кукуруза консервированная', dept: 'canned', unit: 'г', pack: 340, forms: ['банка', 'банки', 'банок'], price: 110, kcal: 58, p: 2.2, f: 0.4, c: 11.2 },
   { id: 'green_peas', name: 'Горошек консервированный', dept: 'canned', unit: 'г', pack: 400, forms: ['банка', 'банки', 'банок'], price: 100, kcal: 40, p: 3.1, f: 0.2, c: 6.5 },
   { id: 'pickles', name: 'Огурцы солёные', dept: 'canned', unit: 'г', pack: 680, forms: ['банка', 'банки', 'банок'], price: 150, kcal: 16, p: 0.8, f: 0.1, c: 1.7 },
+  { id: 'sauerkraut', name: 'Капуста квашеная', dept: 'canned', unit: 'г', pack: 500, price: 120, kcal: 23, p: 1.8, f: 0.1, c: 3, aka: 'капуста кислая' },
   { id: 'olives', name: 'Оливки без косточки', dept: 'canned', unit: 'г', pack: 300, forms: ['банка', 'банки', 'банок'], price: 150, kcal: 166, p: 1, f: 15, c: 6, tags: ['olives'], aka: 'маслины' },
   { id: 'mayo', name: 'Майонез', dept: 'canned', unit: 'г', pack: 400, price: 130, kcal: 624, p: 0.3, f: 67, c: 2.6, al: ['eggs'], alt: 'sour_cream' },
   { id: 'soy_sauce', name: 'Соевый соус', dept: 'canned', unit: 'мл', pack: 150, price: 90, kcal: 53, p: 6, f: 0, c: 6.6, al: ['soy', 'gluten'] },
@@ -123,6 +132,10 @@ export const PRODUCTS = [
   // Заморозка
   { id: 'broccoli', name: 'Брокколи замороженная', dept: 'frozen', unit: 'г', pack: 400, price: 170, kcal: 28, p: 3, f: 0.4, c: 5.2 },
   { id: 'veg_mix', name: 'Овощная смесь замороженная', dept: 'frozen', unit: 'г', pack: 400, price: 130, kcal: 50, p: 2.2, f: 0.5, c: 9 },
+  { id: 'cauliflower', name: 'Цветная капуста замороженная', dept: 'frozen', unit: 'г', pack: 400, price: 160, kcal: 30, p: 2.5, f: 0.3, c: 4.2 },
+  { id: 'spinach', name: 'Шпинат замороженный', dept: 'frozen', unit: 'г', pack: 400, price: 180, kcal: 23, p: 2.9, f: 0.3, c: 2 },
+  { id: 'green_beans', name: 'Стручковая фасоль замороженная', dept: 'frozen', unit: 'г', pack: 400, price: 130, kcal: 24, p: 2, f: 0.2, c: 3.6 },
+  { id: 'vareniki', name: 'Вареники с картошкой', dept: 'frozen', unit: 'г', pack: 900, price: 260, kcal: 190, p: 4.5, f: 3.5, c: 35, al: ['gluten'] },
   { id: 'berries', name: 'Ягоды замороженные', dept: 'frozen', unit: 'г', pack: 300, price: 230, kcal: 40, p: 0.8, f: 0.3, c: 8, aka: 'ягода' },
   { id: 'pelmeni', name: 'Пельмени', dept: 'frozen', unit: 'г', pack: 800, price: 380, kcal: 275, p: 12, f: 13, c: 29, al: ['gluten', 'eggs'], tags: ['pork', 'beef'] },
 

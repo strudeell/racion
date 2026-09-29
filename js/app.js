@@ -46,11 +46,12 @@ function load() {
         plan: s.plan || null,
         checked: s.checked || {},
         prices: s.prices || {},
+        recent: s.recent || [],
         tipClosed: !!s.tipClosed,
       };
     }
   } catch { /* повреждённые данные — начинаем заново */ }
-  return { answers: freshAnswers(), settings: freshSettings(), plan: null, checked: {}, prices: {}, tipClosed: false };
+  return { answers: freshAnswers(), settings: freshSettings(), plan: null, checked: {}, prices: {}, recent: [], tipClosed: false };
 }
 
 let S = load();
@@ -707,9 +708,20 @@ function addStop(text, tag) {
   render();
 }
 
+// Блюда из трёх прошлых меню реже попадают в новое, чтобы меню не повторялись.
+function recentAvoid() {
+  const avoid = new Map();
+  const weights = [1, 0.7, 0.4];
+  (S.recent || []).forEach((ids, k) => {
+    for (const id of ids) avoid.set(id, (avoid.get(id) || 0) + (weights[k] || 0));
+  });
+  return avoid;
+}
+
 function buildNewPlan(seed = newSeed()) {
   const ctx = ctxNow();
-  S.plan = makePlan(ctx, { seed, budget: budgetOf() });
+  S.plan = makePlan(ctx, { seed, budget: budgetOf(), avoid: recentAvoid() });
+  S.recent = [[...new Set(S.plan.slots.filter(s => s.rid).map(s => s.rid))], ...(S.recent || [])].slice(0, 3);
   S.checked = {};
   save();
   invalidate();

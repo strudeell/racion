@@ -15,8 +15,13 @@ const ADULT_KCAL_UNKNOWN = 2250;
 // Пределы порции относительно стандартной взрослой (из рецепта): от половины до двух с половиной.
 const MIN_PORTION = 0.5;
 const MAX_PORTION = 2.5;
-const REPEAT_PENALTY = 450; // «штраф» в рублях за повтор блюда в неделе
-const KIND_PENALTY = 150;   // за похожее блюдо (два плова, три пасты)
+// «Штрафы» при выборе блюда — в рублях на одну порцию.
+const REPEAT_PENALTY = 150;  // то же блюдо второй раз за неделю
+const KIND_PENALTY = 50;     // похожее блюдо (два плова, три пасты)
+const MAIN_PENALTY = 40;     // тот же главный продукт (два блюда из чечевицы)
+const RECENT_PENALTY = 60;   // блюдо было в прошлом меню
+const PROTEIN_PENALTY = 25;  // курица на обед и на ужин подряд
+const NOISE = 45;            // случайность, чтобы меню не повторялись
 
 // Похожие блюда начинаются с одного слова: «Плов с курицей» и «Плов со свининой».
 const kindOf = r => r.name.toLowerCase().split(/[\s,]/)[0];
@@ -202,6 +207,18 @@ export function scaleNutrition(n, k) {
   return { kcal: n.kcal * k, p: n.p * k, f: n.f * k, c: n.c * k };
 }
 
+// Главный продукт блюда — тот, что даёт больше всего калорий (кроме хлеба, масла, муки, сахара).
+function mainOf(ings) {
+  let best = null;
+  let bestKcal = 0;
+  for (const { p, amt } of ings) {
+    if (p.staple || p.dept === 'bread') continue;
+    const kcal = p.kcal * gramsOf(p, amt) / 100;
+    if (kcal > bestKcal) { bestKcal = kcal; best = p.id; }
+  }
+  return best;
+}
+
 function proteinOf(ings) {
   for (const { p } of ings) {
     const t = p.tags || [];
@@ -214,10 +231,10 @@ function proteinOf(ings) {
 
 // Как поправить название, если продукт убрали или заменили: «Блинчики со сметаной» → «Блинчики».
 const NAME_FIXES = {
-  sour_cream: [[' со сметаной', '']],
+  sour_cream: [[' со сметаной', ''], [' и сметаной', '']],
   honey: [[' и мёдом', ''], [' с мёдом', '']],
   butter: [[' со сливочным маслом', '']],
-  milk: [[' с молоком', ' на воде']],
+  milk: [[' с молоком', ' на воде'], [' и молоком', '']],
 };
 
 // Рецепт, подогнанный под человека: без запрещённых продуктов, с заменами.
@@ -258,7 +275,7 @@ function prepare(ctx, r, kids) {
   }
   const base = nutritionOf(ings);
   if (base.kcal < 50) return null;
-  return { r, name, ings, removed, swapped, base, protein: proteinOf(ings) };
+  return { r, name, ings, removed, swapped, base, protein: proteinOf(ings), main: mainOf(ings) };
 }
 
 export function candidates(ctx, meal, who) {
@@ -313,12 +330,28 @@ function addNeed(need, c, mult) {
   for (const { p, amt } of c.ings) need.set(p.id, (need.get(p.id) || 0) + amt * mult);
 }
 
-// Насколько подорожает корзина, если добавить блюдо (с учётом уже открытых упаковок).
-function addedCost(ctx, need, c, mult) {
+// Стоимость ровно того количества, что уйдёт в блюдо, без округления до упаковок.
+function proRata(ctx, p, amt) {
+  const price = priceOf(ctx, p);
+  if (p.byWeight) return (p.gpu ? amt * p.gpu : amt) / 1000 * price;
+  return amt / p.pack * price;
+}
+
+// Во сколько обойдётся блюдо при выборе меню. Половина — сколько реально добавится к чеку
+// (уже открытая пачка сметаны почти бесплатна — так меньше выбрасывается), половина —
+// стоимость самих продуктов. Мука, масло и сахар тоже не бесплатные, хоть и не входят в чек.
+function choiceCost(ctx, need, c, mult) {
   let d = 0;
   for (const { p, amt } of c.ings) {
-    const cur = need.get(p.id) || 0;
-    d += costOf(ctx, p, cur + amt * mult) - costOf(ctx, p, cur);
+    if (p.free) continue;
+    const add = amt * mult;
+    const exact = proRata(ctx, p, add);
+    let receipt = exact;
+    if (!p.staple) {
+      const cur = need.get(p.id) || 0;
+      receipt = purchase(ctx, p, cur + add).cost - (cur > 0.001 ? purchase(ctx, p, cur).cost : 0);
+    }
+    d += (receipt + exact) / 2;
   }
   return d;
 }
@@ -369,12 +402,16 @@ function nextDaySlot(slots, i) {
   return j >= 0 && slots[j].who === s.who && !slots[j].rid ? j : -1;
 }
 
-export function generatePlan(ctx, { seed = newSeed(), costW = 1, noise = 120 } = {}) {
+const bump = (map, key) => map.set(key, (map.get(key) || 0) + 1);
+
+// avoid — блюда из прошлых меню: { id → 1 для прошлого меню, 0.5 для позапрошлого }.
+export function generatePlan(ctx, { seed = newSeed(), costW = 1, noise = NOISE, avoid = null } = {}) {
   const rnd = mulberry32(seed);
   const slots = ctx.slotSpec.map(s => ({ ...s, rid: null, days: 1, left: false }));
   const need = new Map();
   const used = new Map();
   const kinds = new Map();
+  const mains = new Map();
   let prevProtein = null;
 
   for (let i = 0; i < slots.length; i++) {
@@ -387,18 +424,22 @@ export function generatePlan(ctx, { seed = newSeed(), costW = 1, noise = 120 } =
     for (const c of cands) {
       const mult = sum(portions(ctx, s, c));
       const days = c.r.batch === 2 && next >= 0 ? 2 : 1;
-      let score = -(addedCost(ctx, need, c, mult * days) / days) * costW + rnd() * noise;
+      const perPortion = choiceCost(ctx, need, c, mult * days) / (mult * days);
+      let score = -perPortion * costW + rnd() * noise;
       score -= (used.get(c.r.id) || 0) * REPEAT_PENALTY;
       score -= (kinds.get(kindOf(c.r)) || 0) * KIND_PENALTY;
-      if (slots.some(o => o.day === s.day && o.rid === c.r.id)) score -= 3000;
-      if (s.meal !== 'breakfast' && c.protein && c.protein === prevProtein) score -= 70;
+      if (c.main) score -= (mains.get(c.main) || 0) * MAIN_PENALTY;
+      if (avoid) score -= (avoid.get(c.r.id) || 0) * RECENT_PENALTY;
+      if (slots.some(o => o.day === s.day && o.rid === c.r.id)) score -= 1000;
+      if (s.meal !== 'breakfast' && c.protein && c.protein === prevProtein) score -= PROTEIN_PENALTY;
       if (!best || score > best.score) best = { c, mult, days, score };
     }
     s.rid = best.c.r.id;
     s.days = best.days;
     addNeed(need, best.c, best.mult * best.days);
-    used.set(s.rid, (used.get(s.rid) || 0) + 1);
-    kinds.set(kindOf(best.c.r), (kinds.get(kindOf(best.c.r)) || 0) + 1);
+    bump(used, s.rid);
+    bump(kinds, kindOf(best.c.r));
+    if (best.c.main) bump(mains, best.c.main);
     if (best.days === 2) Object.assign(slots[next], { rid: s.rid, left: true });
     if (s.meal !== 'breakfast') prevProtein = best.c.protein;
   }
@@ -443,16 +484,16 @@ function fitBudget(ctx, plan, budget, maxIter = 80) {
 
 // Самый экономный стартовый вариант. Им же считается «минимум» на шаге бюджета,
 // поэтому если человек выбрал сумму не меньше минимума, уложиться получится всегда.
-const CHEAPEST = { seed: 7, costW: 4, noise: 15 };
+const CHEAPEST = { seed: 7, costW: 4, noise: 5 };
 
-export function makePlan(ctx, { seed = newSeed(), budget = null } = {}) {
-  if (budget == null) return generatePlan(ctx, { seed });
-  const typical = planTotal(ctx, generatePlan(ctx, { seed }));
+export function makePlan(ctx, { seed = newSeed(), budget = null, avoid = null } = {}) {
+  if (budget == null) return generatePlan(ctx, { seed, avoid });
+  const typical = planTotal(ctx, generatePlan(ctx, { seed, avoid }));
   const tight = typical > 0 ? clamp((typical - budget) / typical, 0, 1) : 0;
   const attempts = [
-    { seed, costW: 1 + tight * 8, noise: 120 * (1 - Math.min(0.8, tight * 2)) },
-    { seed: seed + 7919, costW: 3, noise: 40 },
-    { seed: seed + 15838, costW: 4, noise: 25 },
+    { seed, avoid, costW: 1 + tight * 6, noise: NOISE * (1 - Math.min(0.8, tight * 2)) },
+    { seed: seed + 7919, avoid, costW: 3, noise: 15 },
+    { seed: seed + 15838, avoid, costW: 4, noise: 10 },
     CHEAPEST,
   ];
   let best = null;
