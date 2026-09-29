@@ -1,0 +1,9 @@
+{
+  "name": "nedelka",
+  "private": true,
+  "type": "module",
+  "description": "Неделька — бесплатное меню на неделю со списком покупок",
+  "scripts": {
+    "test": "node tests/check.js"
+  }
+}
