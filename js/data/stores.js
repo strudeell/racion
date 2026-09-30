@@ -9,6 +9,7 @@ export const STORES = [
   { id: 'dixy',        name: 'Дикси',        tier: 'Рядом с домом',             k: 1.03, badge: 'Д',  color: '#F07D19' },
   { id: 'chizhik',     name: 'Чижик',        tier: 'Дискаунтер · самое нужное', k: 0.86, badge: 'Ч',  color: '#FFD02B', ink: '#2B2118' },
   { id: 'svetofor',    name: 'Светофор',     tier: 'Дискаунтер · большие пачки', k: 0.80, badge: 'С', color: '#C8242B' },
+  { id: 'monetka',     name: 'Монетка',      tier: 'Дискаунтер · недорого',     k: 0.90, badge: 'Мо', color: '#1B9E4B' },
   { id: 'perekrestok', name: 'Перекрёсток',  tier: 'Выбор побольше',            k: 1.12, badge: 'П',  color: '#0F8A3C' },
   { id: 'lenta',       name: 'Лента',        tier: 'Гипермаркет',               k: 0.96, badge: 'Л',  color: '#16398F' },
   { id: 'auchan',      name: 'Ашан',         tier: 'Гипермаркет · впрок',       k: 0.95, badge: 'А',  color: '#DC1F26' },
