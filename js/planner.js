@@ -235,6 +235,7 @@ const NAME_FIXES = {
   honey: [[' и мёдом', ''], [' с мёдом', '']],
   butter: [[' со сливочным маслом', '']],
   milk: [[' с молоком', ' на воде'], [' и молоком', '']],
+  onion: [[' и жареным луком', ''], [' и луком', '']],
 };
 
 // Рецепт, подогнанный под человека: без запрещённых продуктов, с заменами.
@@ -275,7 +276,9 @@ function prepare(ctx, r, kids) {
   }
   const base = nutritionOf(ings);
   if (base.kcal < 50) return null;
-  return { r, name, ings, removed, swapped, base, protein: proteinOf(ings), main: mainOf(ings) };
+  // Стоимость продуктов на одну стандартную порцию — чтобы быстро отсеивать дорогие замены.
+  const exact = ings.reduce((s, { p, amt }) => s + (p.free ? 0 : proRata(ctx, p, amt)), 0);
+  return { r, name, ings, removed, swapped, base, exact, protein: proteinOf(ings), main: mainOf(ings) };
 }
 
 export function candidates(ctx, meal, who) {
@@ -460,6 +463,8 @@ function fitBudget(ctx, plan, budget, maxIter = 80) {
       const curMult = sum(portions(ctx, s, cur)) * s.days;
       for (const c of candidates(ctx, s.meal, s.who)) {
         if (c.r.id === s.rid) continue;
+        // Заметно более дорогое блюдо почти никогда не экономит — не тратим время на подсчёт.
+        if (c.exact > cur.exact + 15) continue;
         if (s.days === 2 && c.r.batch !== 2) continue;
         if (plan.slots.some(o => o.day === s.day && o.rid === c.r.id)) continue;
         const mult = sum(portions(ctx, s, c)) * s.days;
