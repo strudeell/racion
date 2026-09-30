@@ -45,6 +45,8 @@ for (const r of RECIPES) {
     if (!(amt > 0)) fail(`Рецепт ${r.id}: количество ${id} должно быть больше нуля`);
   }
   if (!r.steps?.length) fail(`Рецепт ${r.id}: нет шагов`);
+  if (r.summer != null && typeof r.summer !== 'boolean') fail(`Рецепт ${r.id}: summer должен быть true или false`);
+  if (r.kind != null && (typeof r.kind !== 'string' || !r.kind)) fail(`Рецепт ${r.id}: kind должен быть непустой строкой`);
 }
 
 // Калорийность базовой порции
@@ -84,7 +86,8 @@ for (let t = 0; t < 400; t++) {
     budgetMode: 'none', budget: null,
   };
   const t0 = performance.now();
-  const ctx = makeContext(answers, { batch: Math.random() < 0.8 });
+  const month = 1 + rnd(12);
+  const ctx = makeContext(answers, { batch: Math.random() < 0.8, month });
   const est = estimateBudget(ctx);
   const budget = Math.random() < 0.5 ? Math.round(est.min + Math.random() * (est.typical - est.min)) : null;
   const plan = makePlan(ctx, { seed: rnd(1e9), budget });
@@ -101,6 +104,7 @@ for (let t = 0; t < 400; t++) {
     for (const it of day.items) {
       if (it.missing) continue;
       if (!hasWaffle && it.c.r.equip.includes('waffle')) fail(`Вафли без вафельницы: «${it.c.r.name}» (анкета ${t})`);
+      if (it.c.r.summer && (month < 5 || month > 9)) fail(`Летнее блюдо «${it.c.r.name}» в месяце ${month} (анкета ${t})`);
       if (it.mults.length !== (it.s.who === 'family' ? ctx.people.length : 1)) fail(`Порций ${it.mults.length} у «${it.c.r.name}» (анкета ${t})`);
       for (const { p } of it.c.ings) {
         for (const a of p.al || []) if (al.has(a)) fail(`Аллерген ${a} в «${it.c.r.name}» (анкета ${t})`);

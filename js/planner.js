@@ -22,9 +22,20 @@ const MAIN_PENALTY = 40;     // тот же главный продукт (дв�
 const RECENT_PENALTY = 60;   // блюдо было в прошлом меню
 const PROTEIN_PENALTY = 25;  // курица на обед и на ужин подряд
 const NOISE = 45;            // случайность, чтобы меню не повторялись
+const FIT_BASE = 15;         // подгонка под бюджет: «цена» любой замены в баллах разнообразия
+const FIT_NOISE = 45;        // и случайная добавка к ней, чтобы меню не повторялись
 
 // Похожие блюда начинаются с одного слова: «Плов с курицей» и «Плов со свининой».
-const kindOf = r => r.name.toLowerCase().split(/[\s,]/)[0];
+// Кроме просто «Суп …»: «Суп из сайры» и «Суп с пельменями» — совсем разные блюда.
+// Поле kind у рецепта задаёт группу вручную: гороховый и чечевичный — оба «бобовые».
+const kindOf = r => {
+  if (r.kind) return r.kind;
+  const w = r.name.toLowerCase().split(/[\s,]/)[0];
+  return w === 'суп' ? r.id : w;
+};
+
+// Летние блюда (окрошка, гаспачо) предлагаем с мая по сентябрь.
+const SUMMER_MONTHS = [5, 6, 7, 8, 9];
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const sum = arr => arr.reduce((s, x) => s + x, 0);
@@ -154,6 +165,7 @@ export function makeContext(answers, settings = {}, prices = {}) {
     slotSpec,
     batch: settings.batch !== false,
     staplesInTotal: !!settings.staplesInTotal,
+    summer: SUMMER_MONTHS.includes(settings.month || new Date().getMonth() + 1),
     _prep: new Map(),
     _cands: new Map(),
   };
@@ -285,7 +297,8 @@ export function candidates(ctx, meal, who) {
   const key = meal + ':' + who;
   if (!ctx._cands.has(key)) {
     const kids = who === 'family' && ctx.hasKids;
-    const list = RECIPES.filter(r => r.meals.includes(meal)).map(r => prep(ctx, r.id, kids)).filter(Boolean);
+    // Летние блюда зимой не предлагаем, но в уже составленном меню они остаются.
+    const list = RECIPES.filter(r => r.meals.includes(meal) && (!r.summer || ctx.summer)).map(r => prep(ctx, r.id, kids)).filter(Boolean);
     ctx._cands.set(key, list);
   }
   return ctx._cands.get(key);
@@ -449,12 +462,21 @@ export function generatePlan(ctx, { seed = newSeed(), costW = 1, noise = NOISE, 
   return { seed, slots };
 }
 
-// Заменяет дешёвыми блюдами, пока меню не уложится в бюджет. Возвращает итоговую сумму.
-function fitBudget(ctx, plan, budget, maxIter = 80) {
+// Заменяет блюда более дешёвыми, пока меню не уложится в бюджет. Возвращает итоговую сумму.
+// Без rnd каждый раз берёт самую выгодную замену. С rnd — любую заметно экономящую,
+// с учётом разнообразия: иначе каждую неделю в меню одни и те же самые дешёвые блюда.
+function fitBudget(ctx, plan, budget, { rnd = null, avoid = null, maxIter = 80 } = {}) {
   const need = needOf(ctx, plan);
   let total = totalOf(ctx, need);
   for (let it = 0; it < maxIter && total > budget; it++) {
     const uses = countUses(plan);
+    const kinds = new Map();
+    for (const s of plan.slots) if (s.rid && !s.left) bump(kinds, kindOf(R[s.rid]));
+    // Насколько блюдо портит разнообразие меню; self — сколько раз оно уже учтено в счётчиках.
+    const penaltyOf = (r, self, selfKind) =>
+      ((uses.get(r.id) || 0) - self) * REPEAT_PENALTY +
+      ((kinds.get(kindOf(r)) || 0) - selfKind) * KIND_PENALTY +
+      (avoid ? (avoid.get(r.id) || 0) * RECENT_PENALTY : 0);
     let best = null;
     plan.slots.forEach((s, i) => {
       if (!s.rid || s.left) return;
@@ -468,8 +490,21 @@ function fitBudget(ctx, plan, budget, maxIter = 80) {
         if (s.days === 2 && c.r.batch !== 2) continue;
         if (plan.slots.some(o => o.day === s.day && o.rid === c.r.id)) continue;
         const mult = sum(portions(ctx, s, c)) * s.days;
-        const saving = -replaceCost(ctx, need, cur, curMult, c, mult) - (uses.get(c.r.id) || 0) * 60;
-        if (saving > 1 && (!best || saving > best.saving)) best = { i, c, cur, curMult, mult, saving };
+        const saving = -replaceCost(ctx, need, cur, curMult, c, mult);
+        let score;
+        if (rnd) {
+          if (saving <= 1) continue;
+          // Берём замену, которая экономит больше всего на порцию в расчёте на потерю разнообразия
+          // (повтор, похожее блюдо, блюдо из прошлого меню). Иначе подгонка перебирает мелкие
+          // замены по 5 ₽ и в конце вынужденно ставит одни и те же самые дешёвые блюда.
+          const same = kindOf(c.r) === kindOf(cur.r) ? 1 : 0;
+          const loss = Math.max(0, penaltyOf(c.r, 0, same) - penaltyOf(cur.r, 1, 1));
+          score = (saving / mult) / (FIT_BASE + loss + rnd() * FIT_NOISE);
+        } else {
+          score = saving - (uses.get(c.r.id) || 0) * 60;
+          if (score <= 1) continue;
+        }
+        if (!best || score > best.score) best = { i, c, cur, curMult, mult, score };
       }
     });
     if (!best) break;
@@ -504,7 +539,9 @@ export function makePlan(ctx, { seed = newSeed(), budget = null, avoid = null } 
   let best = null;
   for (const opts of attempts) {
     const plan = generatePlan(ctx, opts);
-    const total = fitBudget(ctx, plan, budget);
+    // Последняя попытка — без случайности: она гарантирует, что минимальный бюджет достижим.
+    const fit = opts === CHEAPEST ? {} : { rnd: mulberry32(opts.seed + 1), avoid };
+    const total = fitBudget(ctx, plan, budget, fit);
     if (!best || total < best.total) best = { plan, total };
     if (total <= budget) break;
   }

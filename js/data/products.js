@@ -43,6 +43,8 @@ export const PRODUCTS = [
   { id: 'greens', name: 'Зелень (укроп, петрушка)', dept: 'veg', unit: 'г', pack: 50, forms: ['пучок', 'пучка', 'пучков'], price: 60, kcal: 40, p: 3, f: 0.5, c: 6, aka: 'укроп петрушка' },
   { id: 'green_onion', name: 'Зелёный лук', dept: 'veg', unit: 'г', pack: 50, forms: ['пучок', 'пучка', 'пучков'], price: 60, kcal: 20, p: 1.3, f: 0.1, c: 3.2, tags: ['onion'] },
   { id: 'cilantro', name: 'Кинза', dept: 'veg', unit: 'г', pack: 50, forms: ['пучок', 'пучка', 'пучков'], price: 70, kcal: 23, p: 2.1, f: 0.5, c: 1.9, tags: ['cilantro'] },
+  { id: 'sorrel', name: 'Щавель', dept: 'veg', unit: 'г', pack: 100, forms: ['пучок', 'пучка', 'пучков'], price: 60, kcal: 22, p: 1.5, f: 0.3, c: 2.9 },
+  { id: 'radish', name: 'Редис', dept: 'veg', unit: 'г', byWeight: true, price: 220, waste: 0.1, kcal: 20, p: 1.2, f: 0.1, c: 3.4, aka: 'редиска' },
   { id: 'lemon', name: 'Лимоны', dept: 'veg', unit: 'шт', byWeight: true, gpu: 130, waste: 0.3, price: 250, kcal: 34, p: 0.9, f: 0.1, c: 3, al: ['citrus'], aka: 'лимон' },
   { id: 'apple', name: 'Яблоки', dept: 'veg', unit: 'шт', byWeight: true, gpu: 180, waste: 0.15, price: 140, kcal: 47, p: 0.4, f: 0.4, c: 9.8, aka: 'яблоко' },
   { id: 'banana', name: 'Бананы', dept: 'veg', unit: 'шт', byWeight: true, gpu: 170, waste: 0.35, price: 160, kcal: 89, p: 1.1, f: 0.3, c: 20, aka: 'банан' },
@@ -141,5 +143,6 @@ export const PRODUCTS = [
 
   // Другое
   { id: 'tofu', name: 'Тофу', dept: 'other', unit: 'г', pack: 300, price: 160, kcal: 76, p: 8.1, f: 4.8, c: 1.9, al: ['soy'], tags: ['tofu'] },
+  { id: 'kvass', name: 'Квас', dept: 'other', unit: 'мл', pack: 1500, forms: ['бутылка', 'бутылки', 'бутылок'], price: 110, kcal: 27, p: 0.2, f: 0, c: 5.2, al: ['gluten'] },
   { id: 'water', name: 'Вода', dept: 'other', unit: 'мл', free: true, price: 0, kcal: 0, p: 0, f: 0, c: 0 },
 ];
